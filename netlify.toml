@@ -2,5 +2,11 @@
   publish = "public"
   functions = "netlify/functions"
 
+[build.environment]
+  # SUPABASE_URL is the public project URL; the browser client in
+  # public/index.html must embed it, so it isn't a secret.
+  # SUPABASE_SERVICE_ROLE_KEY is still scanned.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL"
+
 [functions]
   node_bundler = "esbuild"
