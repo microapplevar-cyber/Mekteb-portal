@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Məktəb Məlumat Portalı</title>
+<style>
+:root{
+  --ink:#14263a; --muted:#5d6b78; --line:#d5dde3; --paper:#f4f6f7; --card:#fff;
+  --brand:#0e6b63; --brand-dark:#0a524c; --brand-soft:#e2f1ef;
+  --danger:#b42318; --warn:#b45309; --ok:#15803d;
+  --ro:#eef2f4;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:15px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:var(--ink);background:var(--paper)}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;line-height:1.25}
+.hidden{display:none!important}
+
+/* header */
+.top{background:var(--ink);color:#fff;display:flex;align-items:center;gap:16px;padding:10px 20px;flex-wrap:wrap}
+.top .brand{font-weight:700;font-size:17px;margin-right:auto}
+.top .who{font-size:13px;opacity:.85;text-align:right}
+.top .who b{display:block;font-weight:600;opacity:1}
+.wrap{max-width:1400px;margin:0 auto;padding:20px}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:18px;flex-wrap:wrap}
+.tab{background:none;border:0;padding:10px 16px;cursor:pointer;color:var(--muted);font-weight:600;border-bottom:3px solid transparent;margin-bottom:-2px}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--brand);border-bottom-color:var(--brand)}
+
+/* buttons */
+.btn{background:var(--brand);color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font-weight:600}
+.btn:hover{background:var(--brand-dark)}
+.btn:disabled{opacity:.55;cursor:wait}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost:hover{background:var(--paper)}
+.btn.danger{background:var(--danger)}
+.btn.sm{padding:4px 9px;font-size:13px}
+.btn.light{background:rgba(255,255,255,.14);color:#fff}
+.btn.light:hover{background:rgba(255,255,255,.26)}
+
+/* forms */
+input,select,textarea{border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fff;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-offset:-1px;border-color:var(--brand)}
+label.f{display:block;margin-bottom:12px;font-size:13px;color:var(--muted);font-weight:600}
+label.f input,label.f select{margin-top:4px;color:var(--ink);font-weight:400}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.bar .grow{flex:1;min-width:200px}
+.bar input.grow,.bar select{width:auto}
+.muted{color:var(--muted)}
+.msg{padding:10px 12px;border-radius:6px;background:var(--brand-soft);margin-bottom:14px;font-size:14px}
+.msg.err{background:#fde8e6;color:var(--danger)}
+
+/* tables */
+.tw{overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--card);max-height:calc(100vh - 230px)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);border-right:1px solid #eaeff2;text-align:left;vertical-align:middle}
+th{background:#eaf0f3;position:sticky;top:0;z-index:2;font-size:13px;white-space:nowrap}
+td.ro{background:var(--ro);color:#2c3e50;font-weight:500}
+td.ro.s{min-width:240px}
+td input,td select,td textarea{border-color:transparent;background:transparent;border-radius:3px;min-width:130px}
+td input:hover,td select:hover,td textarea:hover{border-color:var(--line)}
+td input:focus,td select:focus,td textarea:focus{background:#fff}
+td textarea{min-height:36px;resize:vertical}
+tr.bad td input,tr.bad td select{outline:2px solid var(--danger)}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;background:var(--brand-soft);color:var(--brand-dark)}
+.pill.off{background:#fde8e6;color:var(--danger)}
+.pill.adm{background:#fdf1d8;color:var(--warn)}
+.actions{white-space:nowrap}
+
+/* login */
+.login{min-height:100vh;display:grid;place-items:center;background:linear-gradient(160deg,var(--ink) 0 46%,var(--paper) 46%)}
+.login form{background:#fff;padding:32px;border-radius:10px;width:min(380px,92vw);box-shadow:0 10px 30px rgba(20,38,58,.25)}
+.login h1{font-size:21px;margin-bottom:4px}
+.login p{margin:0 0 20px;color:var(--muted);font-size:14px}
+.login .btn{width:100%;padding:10px;margin-top:4px}
+#le{color:var(--danger);font-size:14px;min-height:20px;margin:10px 0 0}
+
+/* modal + toast */
+.overlay{position:fixed;inset:0;background:rgba(10,20,30,.5);display:grid;place-items:center;z-index:50;padding:16px}
+.modal{background:#fff;border-radius:10px;padding:22px;width:min(520px,100%);max-height:92vh;overflow:auto}
+.modal h2{font-size:18px;margin-bottom:14px}
+.modal .row{display:flex;gap:10px}
+.modal .row>*{flex:1}
+.modal .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+.cred{font-family:Consolas,monospace;background:var(--paper);padding:10px;border-radius:6px;margin:10px 0;user-select:all}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99;display:flex;flex-direction:column;gap:8px;align-items:center}
+.t{background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.t.err{background:var(--danger)}
+.t.ok{background:var(--ok)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.fc{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.fc h3{font-size:16px}
+.ftabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.ftabs button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 14px;cursor:pointer;font-weight:600}
+.ftabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.sticky-save{position:sticky;bottom:0;background:var(--paper);padding:12px 0;display:flex;gap:8px;align-items:center}
+@media(max-width:640px){.wrap{padding:12px}.top{padding:10px 12px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* =================  AYARLAR — BURANI DOLDURUN  ================= */
+const SUPABASE_URL = 'https://ogykwyweyvrrucqxvzqn.supabase.co';      // Supabase > Project Settings > API > Project URL
+const SUPABASE_ANON_KEY = 'sb_publishable_9cqcymuUQ6J2jqWjGGt-4g_QllSlV7K';        // Supabase > Project Settings > API > anon public
+const EMAIL_DOMAIN = 'mekteb.app';                         // admin.js-dəki EMAIL_DOMAIN ilə eyni olmalıdır
+/* ================================================================ */
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); }));
+
+let me = null;            // cari istifadəçinin profili
+let session = null;
+
+/* ---------- köməkçilər ---------- */
+function toast(msg, type = '') {
+  const d = document.createElement('div');
+  d.className = 't ' + type; d.textContent = msg;
+  $('#toast').appendChild(d);
+  setTimeout(() => d.remove(), type === 'err' ? 6000 : 3000);
+}
+function openModal(html) {
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="modal">${html}</div>`;
+  o.addEventListener('mousedown', e => { if (e.target === o) o.remove(); });
+  document.body.appendChild(o);
+  return o;
+}
+function norm(s) {
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ə/g,'e').replace(/ı/g,'i').replace(/ö/g,'o').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ç/g,'c').replace(/ğ/g,'g').trim();
+}
+function genPass(n = 8) {
+  const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const b = crypto.getRandomValues(new Uint32Array(n));
+  return Array.from(b, x => a[x % a.length]).join('');
+}
+async function fetchAll(make) {           // 1000 sətir limitini aşmaq üçün
+  let out = [], from = 0; const step = 1000;
+  for (;;) {
+    const { data, error } = await make().range(from, from + step - 1);
+    if (error) throw error;
+    out = out.concat(data);
+    if (data.length < step) break;
+    from += step;
+  }
+  return out;
+}
+async function callAdmin(payload) {
+  const { data: { session: s } } = await sb.auth.getSession();
+  const r = await fetch('/.netlify/functions/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s ? s.access_token : '') },
+    body: JSON.stringify(payload)
+  });
+  const j = await r.json().catch(() => ({ error: 'Serverdən yanlış cavab' }));
+  if (!r.ok) throw new Error(j.error || 'Xəta');
+  return j;
+}
+const cmpSchool = (a, b) => (a.school_name || '').localeCompare(b.school_name || '', 'az') ;
+const today = () => new Date().toISOString().slice(0, 10);
+
+/* ---------- başlanğıc ---------- */
+async function init() {
+  const { data } = await sb.auth.getSession();
+  session = data.session;
+  if (!session) return renderLogin();
+  const { data: p, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  if (error || !p || !p.active) {
+    await sb.auth.signOut();
+    return renderLogin(!p ? 'Bu hesab üçün profil tapılmadı. Admin ilə əlaqə saxlayın.' : 'Hesabınız deaktiv edilib.');
+  }
+  me = p;
+  me.role === 'admin' ? renderAdmin() : renderSchool();
+}
+
+function renderLogin(err = '') {
+  $('#app').innerHTML = `
+  <div class="login"><form id="lf">
+    <h1>Məktəb Məlumat Portalı</h1>
+    <p>Rəhbərə verilmiş login və parolla daxil olun.</p>
+    <label class="f">Login (UTİS kodu)<input id="lu" autocomplete="username" required autofocus></label>
+    <label class="f">Parol<input id="lp" type="password" autocomplete="current-password" required></label>
+    <button class="btn" id="lb">Daxil ol</button>
+    <div id="le">${esc(err)}</div>
+  </form></div>`;
+  $('#lf').onsubmit = async e => {
+    e.preventDefault();
+    $('#lb').disabled = true; $('#le').textContent = '';
+    const email = $('#lu').value.trim().toLowerCase() + '@' + EMAIL_DOMAIN;
+    const { error } = await sb.auth.signInWithPassword({ email, password: $('#lp').value });
+    if (error) { $('#le').textContent = 'Login və ya parol yanlışdır.'; $('#lb').disabled = false; return; }
+    init();
+  };
+}
+
+function shell(inner, extraBtns = '') {
+  $('#app').innerHTML = `
+  <div class="top">
+    <div class="brand">Məktəb Məlumat Portalı</div>
+    ${extraBtns}
+    <div class="who"><b>${esc(me.school_name || me.username)}</b>${me.role === 'admin' ? 'Administrator' : 'UTİS: ' + esc(me.utis_code || '—')}</div>
+    <button class="btn light sm" id="pw">Parolu dəyiş</button>
+    <button class="btn light sm" id="lo">Çıxış</button>
+  </div>
+  <div class="wrap">${inner}</div>`;
+  $('#lo').onclick = async () => { await sb.auth.signOut(); me = null; renderLogin(); };
+  $('#pw').onclick = changeOwnPassword;
+}
+function changeOwnPassword() {
+  const o = openModal(`<h2>Parolu dəyiş</h2>
+    <label class="f">Yeni parol (ən azı 6 simvol)<input id="np" type="password" autocomplete="new-password"></label>
+    <div class="foot"><button class="btn ghost" id="c">Ləğv et</button><button class="btn" id="s">Yadda saxla</button></div>`);
+  $('#c', o).onclick = () => o.remove();
+  $('#s', o).onclick = async () => {
+    const v = $('#np', o).value;
+    if (v.length < 6) return toast('Parol ən azı 6 simvol olmalıdır', 'err');
+    const { error } = await sb.auth.updateUser({ password: v });
+    if (error) return toast(error.message, 'err');
+    o.remove(); toast('Parol dəyişdirildi', 'ok');
+  };
+}
+
+/* =========================================================
+   MƏKTƏB İSTİFADƏÇİSİ
+   ========================================================= */
+const S = { forms: [], form: null, fields: [], rows: [], deleted: [], ro: false };
+
+async function renderSchool() {
+  shell(`<div id="ftabs" class="ftabs"></div><div id="sbody"><p class="muted">Yüklənir…</p></div>`);
+  const { data, error } = await sb.from('forms').select('*').order('position').order('created_at');
+  if (error) return toast(error.message, 'err');
+  S.forms = data;
+  if (!data.length) { $('#sbody').innerHTML = '<div class="msg">Hələ doldurulacaq cədvəl yoxdur.</div>'; return; }
+  loadSchoolForm(data[0].id);
+}
+
+async function loadSchoolForm(id) {
+  S.form = S.forms.find(f => f.id === id);
+  $('#ftabs').innerHTML = S.forms.map(f => `<button data-id="${f.id}" class="${f.id === id ? 'on' : ''}">${esc(f.title)}</button>`).join('');
+  $('#ftabs').onclick = e => { const b = e.target.closest('button'); if (b) loadSchoolForm(b.dataset.id); };
+  $('#sbody').innerHTML = '<p class="muted">Yüklənir…</p>';
+  const [fr, sr] = await Promise.all([
+    sb.from('form_fields').select('*').eq('form_id', id).order('position'),
+    sb.from('submissions').select('*').eq('form_id', id).eq('school_id', me.id).order('row_no')
+  ]);
+  if (fr.error || sr.error) return toast((fr.error || sr.error).message, 'err');
+  S.fields = fr.data;
+  S.rows = sr.data.map(s => ({ id: s.id, data: s.data || {} }));
+  S.deleted = [];
+  S.ro = !S.form.is_open;
+  if (!S.rows.length && !S.ro) S.rows.push({ id: uid(), data: {} });
+  drawSchoolTable();
+}
+
+function cellInput(f, v, i, ro) {
+  const a = `data-r="${i}" data-f="${f.id}" ${ro ? 'disabled' : ''}`;
+  v = v ?? '';
+  if (f.field_type === 'select')
+    return `<select ${a}><option value=""></option>${(f.options || []).map(o => `<option ${o === v ? 'selected' : ''} value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`;
+  if (f.field_type === 'textarea') return `<textarea ${a} rows="1">${esc(v)}</textarea>`;
+  const t = f.field_type === 'number' ? 'number" step="any' : f.field_type === 'date' ? 'date' : 'text';
+  return `<input type="${t}" value="${esc(v)}" ${a}>`;
+}
+
+function drawSchoolTable() {
+  const F = S.form, ro = S.ro;
+  const canAdd = F.multi_row && !ro;
+  $('#sbody').innerHTML = `
+    <div class="bar"><h2 class="grow">${esc(F.title)}</h2>${ro ? '<span class="pill off">Doldurma bağlıdır</span>' : ''}</div>
+    ${F.description ? `<div class="msg">${esc(F.description)}</div>` : ''}
+    ${!S.fields.length ? '<div class="msg">Bu cədvəlin sütunları hələ əlavə olunmayıb.</div>' : ''}
+    <div class="tw"><table id="st"><thead><tr>
+      <th>№</th><th>Məktəb adı</th><th>UTİS kodu</th>
+      ${S.fields.map(f => `<th>${esc(f.label)}${f.required ? ' *' : ''}</th>`).join('')}
+      ${canAdd ? '<th></th>' : ''}
+    </tr></thead><tbody>
+      ${S.rows.map((r, i) => `<tr data-i="${i}">
+        <td>${i + 1}</td>
+        <td class="ro s">${esc(me.school_name)}</td>
+        <td class="ro">${esc(me.utis_code)}</td>
+        ${S.fields.map(f => `<td>${cellInput(f, r.data[f.id], i, ro)}</td>`).join('')}
+        ${canAdd ? `<td><button class="btn ghost sm" data-del="${i}" title="Sətri sil">✕</button></td>` : ''}
+      </tr>`).join('')}
+    </tbody></table></div>
+    ${ro ? '' : `<div class="sticky-save">
+      ${canAdd ? '<button class="btn ghost" id="addrow">+ Sətir əlavə et</button>' : ''}
+      <button class="btn" id="saverows">Yadda saxla</button>
+      <span class="muted">* ilə işarələnmiş sütunlar məcburidir</span></div>`}`;
+  const t = $('#st');
+  t.addEventListener('input', e => {
+    const el = e.target; if (el.dataset.r === undefined) return;
+    S.rows[+el.dataset.r].data[el.dataset.f] = el.value;
+    el.closest('tr').classList.remove('bad');
+  });
+  t.addEventListener('click', e => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    const i = +b.dataset.del, r = S.rows[i];
+    if (!confirm('Bu sətir silinsin?')) return;
+    S.deleted.push(r.id); S.rows.splice(i, 1);
+    if (!S.rows.length) S.rows.push({ id: uid(), data: {} });
+    drawSchoolTable();
+  });
+  if ($('#addrow')) $('#addrow').onclick = () => { S.rows.push({ id: uid(), data: {} }); drawSchoolTable(); $('#st tbody tr:last-child input,#st tbody tr:last-child select')?.focus(); };
+  if ($('#saverows')) $('#saverows').onclick = saveRows;
+}
+
+async function saveRows() {
+  const isEmpty = r => !S.fields.some(f => (r.data[f.id] ?? '') !== '');
+  const keep = [], drop = [];
+  S.rows.forEach(r => (isEmpty(r) && S.rows.length > 0 ? drop : keep).push(r));
+  // məcburi sahələri yoxla
+  const bad = [];
+  keep.forEach(r => { if (S.fields.some(f => f.required && !String(r.data[f.id] ?? '').trim())) bad.push(S.rows.indexOf(r)); });
+  if (bad.length) {
+    document.querySelectorAll('#st tbody tr').forEach(tr => tr.classList.toggle('bad', bad.includes(+tr.dataset.i)));
+    return toast('Məcburi (*) sütunları doldurun', 'err');
+  }
+  const btn = $('#saverows'); btn.disabled = true;
+  try {
+    const del = [...S.deleted, ...drop.map(r => r.id)];
+    if (del.length) { const { error } = await sb.from('submissions').delete().in('id', del); if (error) throw error; }
+    if (keep.length) {
+      const now = new Date().toISOString();
+      const payload = keep.map((r, i) => ({ id: r.id, form_id: S.form.id, school_id: me.id, row_no: i, data: r.data, updated_at: now }));
+      const { error } = await sb.from('submissions').upsert(payload);
+      if (error) throw error;
+    }
+    toast('Yadda saxlanıldı', 'ok');
+    loadSchoolForm(S.form.id);
+  } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
+}
+
+/* =========================================================
+   ADMİN
+   ========================================================= */
+const A = { tab: 'users', profiles: [], forms: [] };
+
+function renderAdmin() {
+  shell(`
+    <div class="tabs">
+      <button class="tab" data-t="users">İstifadəçilər</button>
+      <button class="tab" data-t="forms">Cədvəl formaları</button>
+      <button class="tab" data-t="data">Daxil olan məlumatlar</button>
+    </div>
+    <div id="tab"></div>`,
+    `<button class="btn light" id="expall">⬇ Hamısını Excel-ə export et</button>`);
+  $('.tabs').onclick = e => { const b = e.target.closest('.tab'); if (b) adminTab(b.dataset.t); };
+  $('#expall').onclick = exportAll;
+  adminTab(A.tab);
+}
+function adminTab(t) {
+  A.tab = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  ({ users: adminUsers, forms: adminForms, data: adminData })[t]();
+}
+
+/* ---------- İstifadəçilər ---------- */
+async function loadProfiles() {
+  A.profiles = await fetchAll(() => sb.from('profiles').select('*').order('id'));
+  A.profiles.sort((a, b) => (a.role === b.role ? cmpSchool(a, b) : a.role === 'admin' ? -1 : 1));
+}
+async function adminUsers() {
+  $('#tab').innerHTML = '<p class="muted">Yüklənir…</p>';
+  try { await loadProfiles(); } catch (e) { return toast(e.message, 'err'); }
+  const nSchool = A.profiles.filter(p => p.role === 'school').length;
+  $('#tab').innerHTML = `
+    <div class="bar">
+      <input class="grow" id="q" placeholder="Məktəb adı, UTİS, direktor və ya login üzrə axtar…">
+      <button class="btn" id="addu">+ İstifadəçi əlavə et</button>
+      <button class="btn ghost" id="bulk">Excel-dən toplu yüklə</button>
+      <button class="btn ghost" id="tpl">Şablonu yüklə</button>
+      <input type="file" id="bf" accept=".xlsx,.xls,.csv" class="hidden">
+    </div>
+    <p class="muted" id="ucount"></p>
+    <div class="tw"><table><thead><tr><th>Məktəb adı</th><th>UTİS</th><th>Direktor</th><th>Login</th><th>Rol</th><th>Status</th><th></th></tr></thead>
+    <tbody id="ub"></tbody></table></div>`;
+  const draw = () => {
+    const q = norm($('#q').value);
+    const list = A.profiles.filter(p => !q || norm([p.school_name, p.utis_code, p.director_name, p.username].join(' ')).includes(q));
+    $('#ucount').textContent = `Cəmi: ${nSchool} məktəb, ${A.profiles.length - nSchool} admin. Göstərilir: ${list.length}`;
+    $('#ub').innerHTML = list.map(p => `<tr>
+      <td>${esc(p.school_name)}</td><td>${esc(p.utis_code)}</td><td>${esc(p.director_name)}</td><td>${esc(p.username)}</td>
+      <td>${p.role === 'admin' ? '<span class="pill adm">Admin</span>' : 'Məktəb'}</td>
+      <td>${p.active ? '<span class="pill">Aktiv</span>' : '<span class="pill off">Deaktiv</span>'}</td>
+      <td class="actions"><button class="btn ghost sm" data-e="${p.id}">Dəyiş</button>
+        <button class="btn ghost sm" data-d="${p.id}">Sil</button></td></tr>`).join('')
+      || '<tr><td colspan="7" class="muted">Heç nə tapılmadı. “Excel-dən toplu yüklə” ilə məktəbləri əlavə edin.</td></tr>';
+  };
+  draw();
+  $('#q').oninput = draw;
+  $('#ub').onclick = e => {
+    const be = e.target.closest('[data-e]'), bd = e.target.closest('[data-d]');
+    if (be) userModal(A.profiles.find(p => p.id === be.dataset.e));
+    if (bd) deleteUser(A.profiles.find(p => p.id === bd.dataset.d));
+  };
+  $('#addu').onclick = () => userModal(null);
+  $('#tpl').onclick = downloadTemplate;
+  $('#bulk').onclick = () => $('#bf').click();
+  $('#bf').onchange = e => { if (e.target.files[0]) bulkImport(e.target.files[0]); e.target.value = ''; };
+}
+
+function userModal(p) {
+  const isNew = !p;
+  const o = openModal(`<h2>${isNew ? 'Yeni istifadəçi' : 'İstifadəçini dəyiş'}</h2>
+    <label class="f">Məktəb adı<input id="u_sn" value="${esc(p?.school_name)}"></label>
+    <div class="row">
+      <label class="f">UTİS kodu<input id="u_ut" value="${esc(p?.utis_code)}"></label>
+      <label class="f">Rol<select id="u_role"><option value="school">Məktəb</option><option value="admin" ${p?.role === 'admin' ? 'selected' : ''}>Admin</option></select></label>
+    </div>
+    <label class="f">Direktor<input id="u_dr" value="${esc(p?.director_name)}"></label>
+    <div class="row">
+      <label class="f">Login (boşdursa UTİS)<input id="u_un" value="${esc(p?.username)}" autocomplete="off"></label>
+      <label class="f">${isNew ? 'Parol (boşdursa avtomatik)' : 'Yeni parol (dəyişmək üçün)'}<input id="u_pw" autocomplete="off"></label>
+    </div>
+    ${isNew ? '' : `<label class="f"><input type="checkbox" id="u_ac" style="width:auto" ${p.active ? 'checked' : ''}> Hesab aktivdir</label>`}
+    <div class="foot"><button class="btn ghost" id="c">Ləğv et</button><button class="btn" id="s">Yadda saxla</button></div>`);
+  $('#c', o).onclick = () => o.remove();
+  $('#s', o).onclick = async () => {
+    const v = id => $(id, o).value.trim();
+    const btn = $('#s', o); btn.disabled = true;
+    try {
+      if (isNew) {
+        const user = { school_name: v('#u_sn'), utis_code: v('#u_ut'), director_name: v('#u_dr'), role: v('#u_role'),
+          username: v('#u_un') || v('#u_ut'), password: v('#u_pw') || genPass() };
+        const { results } = await callAdmin({ action: 'create', users: [user] });
+        const r = results[0];
+        if (!r.ok) throw new Error(r.error);
+        o.remove();
+        openModal(`<h2>İstifadəçi yaradıldı</h2><p>Bu məlumatı qeyd edin — parol sonradan göstərilmir:</p>
+          <div class="cred">Login: ${esc(r.username)}<br>Parol: ${esc(r.password)}</div>
+          <div class="foot"><button class="btn" onclick="this.closest('.overlay').remove()">Bağla</button></div>`);
+      } else {
+        const body = { action: 'update', id: p.id, school_name: v('#u_sn'), utis_code: v('#u_ut'), director_name: v('#u_dr'),
+          role: v('#u_role'), active: $('#u_ac', o).checked };
+        if (v('#u_un') && v('#u_un') !== p.username) body.username = v('#u_un');
+        if (v('#u_pw')) body.password = v('#u_pw');
+        const r = await callAdmin(body);
+        if (!r.ok) throw new Error(r.error);
+        o.remove(); toast('Yadda saxlanıldı', 'ok');
+      }
+      adminUsers();
+    } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
+  };
+}
+
+async function deleteUser(p) {
+  if (!confirm(`“${p.school_name || p.username}” silinsin?\nBu istifadəçinin bütün doldurduğu məlumatlar da silinəcək!`)) return;
+  try { await callAdmin({ action: 'delete', id: p.id }); toast('Silindi', 'ok'); adminUsers(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+function downloadTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Məktəb adı', 'UTİS kodu', 'Direktor', 'Login (boşdursa UTİS)', 'Parol (boşdursa avtomatik)'],
+    ['Nümunə məktəb №1', '1234567', 'Ad Soyad', '', '']
+  ]);
+  ws['!cols'] = [{ wch: 40 }, { wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 28 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Məktəblər');
+  XLSX.writeFile(wb, 'mektebler_sablon.xlsx');
+}
+
+async function bulkImport(file) {
+  let rows;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+  } catch (e) { return toast('Fayl oxunmadı', 'err'); }
+  const users = [];
+  for (const r of rows) {
+    const u = { role: 'school' };
+    for (const [k, val] of Object.entries(r)) {
+      const n = norm(k), s = String(val).trim();
+      if (n.includes('login')) u.username = s;
+      else if (n.includes('parol')) u.password = s;
+      else if (n.includes('utis')) u.utis_code = s;
+      else if (n.includes('direktor') || n.includes('rehber')) u.director_name = s;
+      else if (n.includes('mekteb') || n.includes('school') || n.includes('ad')) u.school_name = s;
+    }
+    if (!u.school_name && !u.utis_code) continue;
+    u.username = u.username || u.utis_code;
+    u.password = u.password || genPass();
+    users.push(u);
+  }
+  if (!users.length) return toast('Faylda istifadəçi tapılmadı. Şablondakı başlıqlardan istifadə edin.', 'err');
+  if (!confirm(`${users.length} istifadəçi yaradılacaq. Davam edilsin?`)) return;
+
+  const o = openModal(`<h2>Yüklənir…</h2><p id="pr">0 / ${users.length}</p>`);
+  const out = [];
+  try {
+    for (let i = 0; i < users.length; i += 10) {
+      const chunk = users.slice(i, i + 10);
+      const { results } = await callAdmin({ action: 'create', users: chunk });
+      chunk.forEach((u, j) => out.push({ ...u, ok: results[j].ok, error: results[j].error || '' }));
+      $('#pr', o).textContent = `${Math.min(i + 10, users.length)} / ${users.length}`;
+    }
+  } catch (e) { toast(e.message, 'err'); }
+  o.remove();
+  const okN = out.filter(x => x.ok).length;
+  // loginlər və parollar siyahısı
+  const aoa = [['Məktəb adı', 'UTİS kodu', 'Direktor', 'Login', 'Parol', 'Nəticə'],
+    ...out.map(x => [x.school_name || '', x.utis_code || '', x.director_name || '', x.username, x.password, x.ok ? 'Yaradıldı' : 'XƏTA: ' + x.error])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 40 }, { wch: 14 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 40 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Login-Parol');
+  XLSX.writeFile(wb, `login_parol_siyahisi_${today()}.xlsx`);
+  openModal(`<h2>Toplu yükləmə bitdi</h2>
+    <p>Yaradıldı: <b>${okN}</b> &nbsp; Xəta: <b>${out.length - okN}</b></p>
+    <p class="muted">Login və parolların olduğu Excel faylı yükləndi. Parollar sonradan göstərilmir — faylı təhlükəsiz saxlayın.</p>
+    <div class="foot"><button class="btn" onclick="this.closest('.overlay').remove()">Bağla</button></div>`);
+  adminUsers();
+}
+
+/* ---------- Cədvəl formaları ---------- */
+async function adminForms() {
+  $('#tab').innerHTML = '<p class="muted">Yüklənir…</p>';
+  const { data, error } = await sb.from('forms').select('*').order('position').order('created_at');
+  if (error) return toast(error.message, 'err');
+  A.forms = data;
+  $('#tab').innerHTML = `
+    <div class="bar"><button class="btn" id="nf">+ Yeni cədvəl</button></div>
+    <div class="cards">${data.map(f => `<div class="fc">
+      <h3>${esc(f.title)}</h3>
+      <div class="muted">${esc(f.description || '')}</div>
+      <div><span class="pill ${f.is_open ? '' : 'off'}">${f.is_open ? 'Açıqdır' : 'Bağlıdır'}</span>
+        <span class="pill">${f.multi_row ? 'Çox sətirli' : 'Tək sətirli'}</span></div>
+      <div><button class="btn sm" data-ed="${f.id}">Sütunlar və ayarlar</button>
+        <button class="btn ghost sm" data-tg="${f.id}">${f.is_open ? 'Bağla' : 'Aç'}</button>
+        <button class="btn ghost sm" data-rm="${f.id}">Sil</button></div></div>`).join('')
+      || '<div class="msg">Hələ cədvəl yoxdur. “+ Yeni cədvəl” ilə başlayın.</div>'}</div>`;
+  $('#nf').onclick = async () => {
+    const title = prompt('Cədvəlin adı:'); if (!title) return;
+    const { data: f, error } = await sb.from('forms').insert({ title, position: A.forms.length }).select().single();
+    if (error) return toast(error.message, 'err');
+    editForm(f.id);
+  };
+  $('.cards').onclick = async e => {
+    const ed = e.target.closest('[data-ed]'), tg = e.target.closest('[data-tg]'), rm = e.target.closest('[data-rm]');
+    if (ed) editForm(ed.dataset.ed);
+    if (tg) {
+      const f = A.forms.find(x => x.id === tg.dataset.tg);
+      const { error } = await sb.from('forms').update({ is_open: !f.is_open }).eq('id', f.id);
+      error ? toast(error.message, 'err') : adminForms();
+    }
+    if (rm) {
+      const f = A.forms.find(x => x.id === rm.dataset.rm);
+      if (!confirm(`“${f.title}” silinsin? Bütün məktəblərin bu cədvəl üzrə doldurduğu məlumatlar da silinəcək!`)) return;
+      const { error } = await sb.from('forms').delete().eq('id', f.id);
+      error ? toast(error.message, 'err') : adminForms();
+    }
+  };
+}
+
+const E = { form: null, fields: [], deleted: [] };
+async function editForm(id) {
+  const [fr, fl] = await Promise.all([
+    sb.from('forms').select('*').eq('id', id).single(),
+    sb.from('form_fields').select('*').eq('form_id', id).order('position')
+  ]);
+  if (fr.error || fl.error) return toast((fr.error || fl.error).message, 'err');
+  E.form = fr.data; E.fields = fl.data; E.deleted = [];
+  drawEditor();
+}
+const TYPES = { text: 'Mətn', number: 'Rəqəm', date: 'Tarix', select: 'Siyahıdan seçim', textarea: 'Uzun mətn' };
+function drawEditor() {
+  const f = E.form;
+  $('#tab').innerHTML = `
+    <div class="bar"><button class="btn ghost" id="back">← Cədvəllərə qayıt</button></div>
+    <div class="fc" style="margin-bottom:16px">
+      <label class="f">Cədvəlin adı<input id="e_t" value="${esc(f.title)}"></label>
+      <label class="f">Məktəblər üçün izah (ixtiyari)<input id="e_d" value="${esc(f.description || '')}"></label>
+      <div class="bar">
+        <label><input type="checkbox" id="e_m" style="width:auto" ${f.multi_row ? 'checked' : ''}> Məktəb bir neçə sətir doldura bilsin</label>
+        <label><input type="checkbox" id="e_o" style="width:auto" ${f.is_open ? 'checked' : ''}> Doldurma açıqdır</label>
+      </div>
+    </div>
+    <div class="msg">Hər cədvəldə <b>Məktəb adı</b> və <b>UTİS kodu</b> sütunları avtomatik, ilk iki sütun kimi əlavə olunur. Aşağıda yalnız qalan sütunları təyin edin.</div>
+    <div class="tw"><table><thead><tr><th>№</th><th>Sütun adı</th><th>Növ</th><th>Seçimlər (vergüllə)</th><th>Məcburi</th><th></th></tr></thead><tbody id="eb">
+    ${E.fields.map((x, i) => `<tr data-i="${i}">
+      <td>${i + 1}</td>
+      <td><input data-k="label" value="${esc(x.label)}" placeholder="məs: Şagird sayı"></td>
+      <td><select data-k="field_type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${x.field_type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+      <td><input data-k="options" value="${esc((x.options || []).join(', '))}" ${x.field_type === 'select' ? '' : 'disabled placeholder="—"'}></td>
+      <td><input type="checkbox" data-k="required" style="width:auto;min-width:0" ${x.required ? 'checked' : ''}></td>
+      <td class="actions"><button class="btn ghost sm" data-up="${i}">↑</button> <button class="btn ghost sm" data-dn="${i}">↓</button> <button class="btn ghost sm" data-rm="${i}">✕</button></td>
+    </tr>`).join('')}</tbody></table></div>
+    <div class="sticky-save"><button class="btn ghost" id="addf">+ Sütun əlavə et</button><button class="btn" id="savef">Yadda saxla</button></div>`;
+  $('#back').onclick = adminForms;
+  $('#addf').onclick = () => { syncEditor(); E.fields.push({ id: uid(), form_id: f.id, label: '', field_type: 'text', options: [], required: false }); drawEditor(); };
+  $('#savef').onclick = saveForm;
+  const tb = $('#eb');
+  tb.addEventListener('change', e => {
+    const k = e.target.dataset.k; if (!k) return;
+    if (k === 'field_type') { syncEditor(); drawEditor(); }
+  });
+  tb.addEventListener('click', e => {
+    const up = e.target.closest('[data-up]'), dn = e.target.closest('[data-dn]'), rm = e.target.closest('[data-rm]');
+    if (!up && !dn && !rm) return;
+    syncEditor();
+    if (up && +up.dataset.up > 0) { const i = +up.dataset.up; [E.fields[i - 1], E.fields[i]] = [E.fields[i], E.fields[i - 1]]; }
+    if (dn && +dn.dataset.dn < E.fields.length - 1) { const i = +dn.dataset.dn; [E.fields[i + 1], E.fields[i]] = [E.fields[i], E.fields[i + 1]]; }
+    if (rm) {
+      if (!confirm('Bu sütun silinsin? Məktəblərin bu sütunda yazdığı məlumat da export-da görünməyəcək.')) return;
+      E.deleted.push(E.fields[+rm.dataset.rm].id); E.fields.splice(+rm.dataset.rm, 1);
+    }
+    drawEditor();
+  });
+}
+function syncEditor() {
+  document.querySelectorAll('#eb tr').forEach(tr => {
+    const x = E.fields[+tr.dataset.i]; if (!x) return;
+    tr.querySelectorAll('[data-k]').forEach(el => {
+      const k = el.dataset.k;
+      if (k === 'required') x.required = el.checked;
+      else if (k === 'options') x.options = el.value.split(',').map(s => s.trim()).filter(Boolean);
+      else x[k] = el.value;
+    });
+    if (x.field_type !== 'select') x.options = [];
+  });
+  if ($('#e_t')) {
+    E.form.title = $('#e_t').value; E.form.description = $('#e_d').value;
+    E.form.multi_row = $('#e_m').checked; E.form.is_open = $('#e_o').checked;
+  }
+}
+async function saveForm() {
+  syncEditor();
+  if (!E.form.title.trim()) return toast('Cədvəlin adını yazın', 'err');
+  if (E.fields.some(x => !x.label.trim())) return toast('Boş adlı sütun var', 'err');
+  if (E.fields.some(x => x.field_type === 'select' && !x.options.length)) return toast('Seçim sütunları üçün variantları yazın', 'err');
+  try {
+    let r = await sb.from('forms').update({ title: E.form.title.trim(), description: E.form.description || null, multi_row: E.form.multi_row, is_open: E.form.is_open }).eq('id', E.form.id);
+    if (r.error) throw r.error;
+    if (E.deleted.length) { r = await sb.from('form_fields').delete().in('id', E.deleted); if (r.error) throw r.error; }
+    if (E.fields.length) {
+      r = await sb.from('form_fields').upsert(E.fields.map((x, i) => ({
+        id: x.id, form_id: E.form.id, label: x.label.trim(), field_type: x.field_type, options: x.options || [], required: !!x.required, position: i })));
+      if (r.error) throw r.error;
+    }
+    toast('Yadda saxlanıldı', 'ok'); editForm(E.form.id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ---------- Daxil olan məlumatlar ---------- */
+async function adminData() {
+  $('#tab').innerHTML = '<p class="muted">Yüklənir…</p>';
+  const { data, error } = await sb.from('forms').select('*').order('position').order('created_at');
+  if (error) return toast(error.message, 'err');
+  A.forms = data;
+  if (!data.length) { $('#tab').innerHTML = '<div class="msg">Hələ cədvəl yaradılmayıb.</div>'; return; }
+  $('#tab').innerHTML = `
+    <div class="bar">
+      <select id="df">${data.map(f => `<option value="${f.id}">${esc(f.title)}</option>`).join('')}</select>
+      <input class="grow" id="dq" placeholder="Məktəb adı və ya UTİS üzrə axtar…">
+      <button class="btn" id="dx">⬇ Bu cədvəli Excel-ə at</button>
+    </div>
+    <p class="muted" id="dinfo"></p>
+    <div class="tw"><table id="dt"></table></div>`;
+  let fields = [], subs = [], profMap = {};
+  const load = async () => {
+    $('#dinfo').textContent = 'Yüklənir…';
+    const fid = $('#df').value;
+    if (!A.profiles.length) await loadProfiles();
+    profMap = Object.fromEntries(A.profiles.map(p => [p.id, p]));
+    const fr = await sb.from('form_fields').select('*').eq('form_id', fid).order('position');
+    fields = fr.data || [];
+    subs = await fetchAll(() => sb.from('submissions').select('*').eq('form_id', fid).order('id'));
+    subs.sort((a, b) => cmpSchool(profMap[a.school_id] || {}, profMap[b.school_id] || {}) || a.row_no - b.row_no);
+    draw();
+  };
+  const draw = () => {
+    const q = norm($('#dq').value);
+    const list = subs.filter(s => { const p = profMap[s.school_id] || {}; return !q || norm((p.school_name || '') + ' ' + (p.utis_code || '')).includes(q); });
+    const done = new Set(subs.map(s => s.school_id)).size;
+    const total = A.profiles.filter(p => p.role === 'school').length;
+    $('#dinfo').textContent = `${done} / ${total} məktəb doldurub. Göstərilən sətir: ${list.length}`;
+    $('#dt').innerHTML = `<thead><tr><th>Məktəb adı</th><th>UTİS kodu</th>${fields.map(f => `<th>${esc(f.label)}</th>`).join('')}</tr></thead><tbody>
+      ${list.map(s => { const p = profMap[s.school_id] || {}; return `<tr><td class="ro s">${esc(p.school_name)}</td><td class="ro">${esc(p.utis_code)}</td>${fields.map(f => `<td>${esc(s.data[f.id])}</td>`).join('')}</tr>`; }).join('')
+        || `<tr><td colspan="${fields.length + 2}" class="muted">Məlumat yoxdur.</td></tr>`}</tbody>`;
+  };
+  $('#df').onchange = load; $('#dq').oninput = draw;
+  $('#dx').onclick = async () => {
+    const f = A.forms.find(x => x.id === $('#df').value);
+    const wb = XLSX.utils.book_new();
+    addFormSheet(wb, f, fields, subs, profMap);
+    XLSX.writeFile(wb, `${f.title.replace(/[\\/:*?"<>|]/g, ' ').trim()}_${today()}.xlsx`);
+  };
+  load();
+}
+
+/* ---------- Excel export ---------- */
+function sheetName(wb, title) {
+  let base = title.replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || 'Cədvəl', n = base, i = 2;
+  while (wb.SheetNames.includes(n)) n = base + ' ' + i++;
+  return n;
+}
+function addFormSheet(wb, form, fields, subs, profMap) {
+  const sorted = [...subs].sort((a, b) => cmpSchool(profMap[a.school_id] || {}, profMap[b.school_id] || {}) || a.row_no - b.row_no);
+  const aoa = [['Məktəb adı', 'UTİS kodu', ...fields.map(f => f.label)]];
+  sorted.forEach(s => {
+    const p = profMap[s.school_id] || {};
+    aoa.push([p.school_name || '', p.utis_code || '', ...fields.map(f => {
+      const v = s.data[f.id] ?? '';
+      return f.field_type === 'number' && v !== '' && !isNaN(Number(v)) ? Number(v) : v;
+    })]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 42 }, { wch: 14 }, ...fields.map(() => ({ wch: 22 }))];
+  ws['!freeze'] = { xSplit: 2, ySplit: 1 };
+  XLSX.utils.book_append_sheet(wb, ws, sheetName(wb, form.title));
+}
+async function exportAll() {
+  const btn = $('#expall'); btn.disabled = true; const old = btn.textContent; btn.textContent = 'Hazırlanır…';
+  try {
+    await loadProfiles();
+    const schools = A.profiles.filter(p => p.role === 'school');
+    const { data: forms, error } = await sb.from('forms').select('*').order('position').order('created_at');
+    if (error) throw error;
+    if (!forms.length) throw new Error('Hələ cədvəl yoxdur');
+    const multi = forms.length > 1;
+    // hər cədvəl üçün: sütunlar və məktəb üzrə sətirlər
+    const parts = [];
+    for (const f of forms) {
+      const { data: fields } = await sb.from('form_fields').select('*').eq('form_id', f.id).order('position');
+      const subs = await fetchAll(() => sb.from('submissions').select('*').eq('form_id', f.id).order('id'));
+      const bySchool = {};
+      subs.forEach(s => (bySchool[s.school_id] = bySchool[s.school_id] || []).push(s));
+      Object.values(bySchool).forEach(l => l.sort((a, b) => a.row_no - b.row_no));
+      parts.push({ f, fields: fields || [], bySchool });
+    }
+    // başlıq: Məktəb adı | UTİS | (Cədvəl adı: sütun) ...
+    const head = ['Məktəb adı', 'UTİS kodu'];
+    parts.forEach(pt => pt.fields.forEach(fl => head.push(multi ? `${pt.f.title}: ${fl.label}` : fl.label)));
+    const aoa = [head];
+    const sorted = [...schools].sort(cmpSchool);
+    sorted.forEach(p => {
+      const n = Math.max(1, ...parts.map(pt => (pt.bySchool[p.id] || []).length));
+      for (let i = 0; i < n; i++) {
+        const row = [p.school_name || '', p.utis_code || ''];
+        parts.forEach(pt => {
+          const s = (pt.bySchool[p.id] || [])[i];
+          pt.fields.forEach(fl => {
+            const v = s ? (s.data[fl.id] ?? '') : '';
+            row.push(fl.field_type === 'number' && v !== '' && !isNaN(Number(v)) ? Number(v) : v);
+          });
+        });
+        aoa.push(row);
+      }
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 42 }, { wch: 14 }, ...head.slice(2).map(() => ({ wch: 24 }))];
+    ws['!freeze'] = { xSplit: 2, ySplit: 1 };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Məlumatlar');
+    XLSX.writeFile(wb, `butun_melumatlar_${today()}.xlsx`);
+    toast('Excel faylı hazırdır', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  btn.disabled = false; btn.textContent = old;
+}
+
+init();
+</script>
+</body>
+</html>
