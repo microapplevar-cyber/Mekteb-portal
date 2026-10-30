@@ -110,8 +110,8 @@ tr.bad td input,tr.bad td select{outline:2px solid var(--danger)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /* =================  AYARLAR — BURANI DOLDURUN  ================= */
-const SUPABASE_URL = 'https://ogykwyweyvrrucqxvzqn.supabase.co';      // Supabase > Project Settings > API > Project URL
-const SUPABASE_ANON_KEY = 'sb_publishable_9cqcymuUQ6J2jqWjGGt-4g_QllSlV7K';        // Supabase > Project Settings > API > anon public
+const SUPABASE_URL = 'https://XXXXXXXX.supabase.co';      // Supabase > Project Settings > API > Project URL
+const SUPABASE_ANON_KEY = 'BURAYA_ANON_PUBLIC_KEY';        // Supabase > Project Settings > API > anon public
 const EMAIL_DOMAIN = 'mekteb.app';                         // admin.js-dəki EMAIL_DOMAIN ilə eyni olmalıdır
 /* ================================================================ */
 
@@ -270,9 +270,14 @@ function cellInput(f, v, i, ro) {
   v = v ?? '';
   if (f.field_type === 'select')
     return `<select ${a}><option value=""></option>${(f.options || []).map(o => `<option ${o === v ? 'selected' : ''} value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`;
-  if (f.field_type === 'textarea') return `<textarea ${a} rows="1">${esc(v)}</textarea>`;
+  let lim = '';
+  if (f.field_type === 'number') {
+    if (f.min_limit != null) lim += ` min="${f.min_limit}"`;
+    if (f.max_limit != null) lim += ` max="${f.max_limit}"`;
+  } else if ((f.field_type === 'text' || f.field_type === 'textarea') && f.max_limit != null) lim = ` maxlength="${f.max_limit}"`;
+  if (f.field_type === 'textarea') return `<textarea ${a}${lim} rows="1">${esc(v)}</textarea>`;
   const t = f.field_type === 'number' ? 'number" step="any' : f.field_type === 'date' ? 'date' : 'text';
-  return `<input type="${t}" value="${esc(v)}" ${a}>`;
+  return `<input type="${t}" value="${esc(v)}" ${a}${lim}>`;
 }
 
 function drawSchoolTable() {
@@ -284,7 +289,7 @@ function drawSchoolTable() {
     ${!S.fields.length ? '<div class="msg">Bu cədvəlin sütunları hələ əlavə olunmayıb.</div>' : ''}
     <div class="tw"><table id="st"><thead><tr>
       <th>№</th><th>Məktəb adı</th><th>UTİS kodu</th>
-      ${S.fields.map(f => `<th>${esc(f.label)}${f.required ? ' *' : ''}</th>`).join('')}
+      ${S.fields.map(f => `<th>${esc(f.label)}${f.required ? ' *' : ''}${fieldHint(f) ? `<div class="muted" style="font-weight:400;font-size:11px">${esc(fieldHint(f))}</div>` : ''}</th>`).join('')}
       ${canAdd ? '<th></th>' : ''}
     </tr></thead><tbody>
       ${S.rows.map((r, i) => `<tr data-i="${i}">
@@ -297,6 +302,9 @@ function drawSchoolTable() {
     </tbody></table></div>
     ${ro ? '' : `<div class="sticky-save">
       ${canAdd ? '<button class="btn ghost" id="addrow">+ Sətir əlavə et</button>' : ''}
+      <button class="btn ghost" id="xtpl">Excel şablonu yüklə</button>
+      <button class="btn ghost" id="xup">Hazır Excel-i yüklə</button>
+      <input type="file" id="xf" accept=".xlsx,.xls,.csv" class="hidden">
       <button class="btn" id="saverows">Yadda saxla</button>
       <span class="muted">* ilə işarələnmiş sütunlar məcburidir</span></div>`}`;
   const t = $('#st');
@@ -315,6 +323,98 @@ function drawSchoolTable() {
   });
   if ($('#addrow')) $('#addrow').onclick = () => { S.rows.push({ id: uid(), data: {} }); drawSchoolTable(); $('#st tbody tr:last-child input,#st tbody tr:last-child select')?.focus(); };
   if ($('#saverows')) $('#saverows').onclick = saveRows;
+  if ($('#xtpl')) $('#xtpl').onclick = schoolTemplate;
+  if ($('#xup')) {
+    $('#xup').onclick = () => $('#xf').click();
+    $('#xf').onchange = e => { if (e.target.files[0]) schoolImport(e.target.files[0]); e.target.value = ''; };
+  }
+}
+
+function schoolTemplate() {
+  const head = ['Məktəb adı', 'UTİS kodu', ...S.fields.map(f => f.label)];
+  const ws = XLSX.utils.aoa_to_sheet([head, [me.school_name || '', me.utis_code || '']]);
+  ws['!cols'] = [{ wch: 40 }, { wch: 14 }, ...S.fields.map(() => ({ wch: 22 }))];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Cədvəl');
+  XLSX.writeFile(wb, `${S.form.title.replace(/[\\/:*?"<>|]/g, ' ').trim()}_sablon.xlsx`);
+}
+
+function xlVal(v) {
+  if (v instanceof Date) return new Date(v.getTime() - v.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return String(v ?? '').trim();
+}
+async function schoolImport(file) {
+  let rows;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+  } catch (e) { return toast('Fayl oxunmadı', 'err'); }
+  if (!rows.length) return toast('Faylda sətir tapılmadı', 'err');
+  // sütun adlarını cədvəlin sütunları ilə uyğunlaşdır (Məktəb adı və UTİS yüklənmir — avtomatikdir)
+  const map = {};
+  Object.keys(rows[0]).forEach(h => { const f = S.fields.find(x => norm(x.label) === norm(h)); if (f) map[h] = f; });
+  if (!Object.keys(map).length)
+    return toast('Sütun başlıqları cədvəllə uyğun gəlmir. “Excel şablonu yüklə” ilə şablonu götürün.', 'err');
+  let bad = 0;
+  const parsed = rows.map(r => {
+    const data = {};
+    for (const [h, f] of Object.entries(map)) {
+      let v = xlVal(r[h]);
+      if (v && f.field_type === 'select') { const o = (f.options || []).find(o => norm(o) === norm(v)); if (o) v = o; else { v = ''; bad++; } }
+      else if (v && f.field_type === 'number') { const n = Number(v.replace(',', '.')); if (isNaN(n)) { v = ''; bad++; } else v = String(n); }
+      else if (v && f.field_type === 'date') {
+        const m = v.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+        if (m) v = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        else if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { v = ''; bad++; }
+      }
+      data[f.id] = v;
+    }
+    return { id: uid(), data };
+  }).filter(r => Object.values(r.data).some(v => v !== ''));
+  if (!parsed.length) return toast('Faylda dolu sətir tapılmadı', 'err');
+  const use = S.form.multi_row ? parsed : parsed.slice(0, 1);
+  const hasData = S.rows.some(r => Object.values(r.data).some(v => v !== ''));
+  let replace = true;
+  if (hasData && S.form.multi_row) replace = confirm(`${use.length} sətir oxundu.\n\nOK — mövcud sətirləri əvəz et\nCancel — mövcud sətirlərin ardınca əlavə et`);
+  if (replace) { S.rows.forEach(r => S.deleted.push(r.id)); S.rows = use; }
+  else S.rows = S.rows.filter(r => Object.values(r.data).some(v => v !== '')).concat(use);
+  drawSchoolTable();
+  toast(`${use.length} sətir yükləndi${bad ? `, ${bad} xanada yanlış dəyər boş buraxıldı` : ''}. Yoxlayıb “Yadda saxla” basın.`, bad ? 'err' : 'ok');
+}
+
+function fieldHint(f) {
+  const h = [], num = f.field_type === 'number';
+  if (!num && f.min_limit != null && f.min_limit === f.max_limit) h.push(`${f.min_limit} simvol`);
+  else {
+    if (f.min_limit != null) h.push(num ? `min ${f.min_limit}` : `ən azı ${f.min_limit} simvol`);
+    if (f.max_limit != null) h.push(num ? `max ${f.max_limit}` : `ən çox ${f.max_limit} simvol`);
+  }
+  if (f.is_unique) h.push('təkrarsız');
+  return h.join(', ');
+}
+function validateRows(keep) {
+  const seen = {};
+  for (const r of keep) {
+    const i = S.rows.indexOf(r);
+    for (const f of S.fields) {
+      const v = String(r.data[f.id] ?? '').trim();
+      if (!v) continue;
+      if (f.field_type === 'number') {
+        const n = Number(v.replace(',', '.'));
+        if (isNaN(n)) return { i, msg: `“${f.label}” sütununda rəqəm olmalıdır` };
+        if (f.min_limit != null && n < f.min_limit) return { i, msg: `“${f.label}”: ${v} — ən azı ${f.min_limit} olmalıdır` };
+        if (f.max_limit != null && n > f.max_limit) return { i, msg: `“${f.label}”: ${v} — ən çox ${f.max_limit} ola bilər` };
+      } else if (f.field_type === 'text' || f.field_type === 'textarea') {
+        if (f.min_limit != null && v.length < f.min_limit) return { i, msg: `“${f.label}”: “${v}” ən azı ${f.min_limit} simvol olmalıdır (${v.length} var)` };
+        if (f.max_limit != null && v.length > f.max_limit) return { i, msg: `“${f.label}”: “${v}” ən çox ${f.max_limit} simvol ola bilər (${v.length} var)` };
+      }
+      if (f.is_unique) {
+        const k = f.id + '|' + v.toUpperCase();
+        if (seen[k] !== undefined) return { i, msg: `“${f.label}”: “${v}” cədvəldə təkrarlanır (${seen[k] + 1} və ${i + 1}-ci sətir)` };
+        seen[k] = i;
+      }
+    }
+  }
+  return null;
 }
 
 async function saveRows() {
@@ -327,6 +427,11 @@ async function saveRows() {
   if (bad.length) {
     document.querySelectorAll('#st tbody tr').forEach(tr => tr.classList.toggle('bad', bad.includes(+tr.dataset.i)));
     return toast('Məcburi (*) sütunları doldurun', 'err');
+  }
+  const ve = validateRows(keep);
+  if (ve) {
+    document.querySelectorAll('#st tbody tr').forEach(tr => tr.classList.toggle('bad', +tr.dataset.i === ve.i));
+    return toast(ve.msg, 'err');
   }
   const btn = $('#saverows'); btn.disabled = true;
   try {
@@ -587,18 +692,19 @@ function drawEditor() {
       </div>
     </div>
     <div class="msg">Hər cədvəldə <b>Məktəb adı</b> və <b>UTİS kodu</b> sütunları avtomatik, ilk iki sütun kimi əlavə olunur. Aşağıda yalnız qalan sütunları təyin edin.</div>
-    <div class="tw"><table><thead><tr><th>№</th><th>Sütun adı</th><th>Növ</th><th>Seçimlər (vergüllə)</th><th>Məcburi</th><th></th></tr></thead><tbody id="eb">
+    <div class="tw"><table><thead><tr><th>№</th><th>Sütun adı</th><th>Növ</th><th>Seçimlər (vergüllə)</th><th>Məcburi</th><th>Qaydalar</th><th></th></tr></thead><tbody id="eb">
     ${E.fields.map((x, i) => `<tr data-i="${i}">
       <td>${i + 1}</td>
       <td><input data-k="label" value="${esc(x.label)}" placeholder="məs: Şagird sayı"></td>
       <td><select data-k="field_type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${x.field_type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
       <td><input data-k="options" value="${esc((x.options || []).join(', '))}" ${x.field_type === 'select' ? '' : 'disabled placeholder="—"'}></td>
       <td><input type="checkbox" data-k="required" style="width:auto;min-width:0" ${x.required ? 'checked' : ''}></td>
+      <td>${ruleCell(x)}</td>
       <td class="actions"><button class="btn ghost sm" data-up="${i}">↑</button> <button class="btn ghost sm" data-dn="${i}">↓</button> <button class="btn ghost sm" data-rm="${i}">✕</button></td>
     </tr>`).join('')}</tbody></table></div>
     <div class="sticky-save"><button class="btn ghost" id="addf">+ Sütun əlavə et</button><button class="btn" id="savef">Yadda saxla</button></div>`;
   $('#back').onclick = adminForms;
-  $('#addf').onclick = () => { syncEditor(); E.fields.push({ id: uid(), form_id: f.id, label: '', field_type: 'text', options: [], required: false }); drawEditor(); };
+  $('#addf').onclick = () => { syncEditor(); E.fields.push({ id: uid(), form_id: f.id, label: '', field_type: 'text', options: [], required: false, is_unique: false, min_limit: null, max_limit: null }); drawEditor(); };
   $('#savef').onclick = saveForm;
   const tb = $('#eb');
   tb.addEventListener('change', e => {
@@ -618,16 +724,26 @@ function drawEditor() {
     drawEditor();
   });
 }
+function ruleCell(x) {
+  const t = x.field_type, num = t === 'number', canU = t === 'text' || num, canL = canU || t === 'textarea';
+  const st = 'width:92px;min-width:0;border:1px solid var(--line)';
+  return `<label style="white-space:nowrap;display:block;margin-bottom:4px"><input type="checkbox" data-k="is_unique" style="width:auto;min-width:0" ${x.is_unique ? 'checked' : ''} ${canU ? '' : 'disabled'}> Təkrarsız (unikal)</label>
+    <input type="number" step="any" data-k="min_limit" style="${st}" placeholder="${num ? 'min dəyər' : 'min simvol'}" value="${x.min_limit ?? ''}" ${canL ? '' : 'disabled'}>
+    <input type="number" step="any" data-k="max_limit" style="${st}" placeholder="${num ? 'max dəyər' : 'max simvol'}" value="${x.max_limit ?? ''}" ${canL ? '' : 'disabled'}>`;
+}
 function syncEditor() {
   document.querySelectorAll('#eb tr').forEach(tr => {
     const x = E.fields[+tr.dataset.i]; if (!x) return;
     tr.querySelectorAll('[data-k]').forEach(el => {
       const k = el.dataset.k;
-      if (k === 'required') x.required = el.checked;
+      if (k === 'required' || k === 'is_unique') x[k] = el.checked;
+      else if (k === 'min_limit' || k === 'max_limit') x[k] = el.value === '' ? null : Number(el.value);
       else if (k === 'options') x.options = el.value.split(',').map(s => s.trim()).filter(Boolean);
       else x[k] = el.value;
     });
     if (x.field_type !== 'select') x.options = [];
+    if (x.field_type !== 'text' && x.field_type !== 'number') x.is_unique = false;
+    if (!['text', 'number', 'textarea'].includes(x.field_type)) { x.min_limit = null; x.max_limit = null; }
   });
   if ($('#e_t')) {
     E.form.title = $('#e_t').value; E.form.description = $('#e_d').value;
@@ -639,13 +755,14 @@ async function saveForm() {
   if (!E.form.title.trim()) return toast('Cədvəlin adını yazın', 'err');
   if (E.fields.some(x => !x.label.trim())) return toast('Boş adlı sütun var', 'err');
   if (E.fields.some(x => x.field_type === 'select' && !x.options.length)) return toast('Seçim sütunları üçün variantları yazın', 'err');
+  if (E.fields.some(x => x.min_limit != null && x.max_limit != null && x.min_limit > x.max_limit)) return toast('Min limit max-dan böyük ola bilməz', 'err');
   try {
     let r = await sb.from('forms').update({ title: E.form.title.trim(), description: E.form.description || null, multi_row: E.form.multi_row, is_open: E.form.is_open }).eq('id', E.form.id);
     if (r.error) throw r.error;
     if (E.deleted.length) { r = await sb.from('form_fields').delete().in('id', E.deleted); if (r.error) throw r.error; }
     if (E.fields.length) {
       r = await sb.from('form_fields').upsert(E.fields.map((x, i) => ({
-        id: x.id, form_id: E.form.id, label: x.label.trim(), field_type: x.field_type, options: x.options || [], required: !!x.required, position: i })));
+        id: x.id, form_id: E.form.id, label: x.label.trim(), field_type: x.field_type, options: x.options || [], required: !!x.required, is_unique: !!x.is_unique, min_limit: x.min_limit ?? null, max_limit: x.max_limit ?? null, position: i })));
       if (r.error) throw r.error;
     }
     toast('Yadda saxlanıldı', 'ok'); editForm(E.form.id);
