@@ -110,8 +110,8 @@ tr.bad td input,tr.bad td select{outline:2px solid var(--danger)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /* =================  AYARLAR — BURANI DOLDURUN  ================= */
-const SUPABASE_URL = 'https://ogykwyweyvrrucqxvzqn.supabase.co';      // Supabase > Project Settings > API > Project URL
-const SUPABASE_ANON_KEY = 'sb_publishable_9cqcymuUQ6J2jqWjGGt-4g_QllSlV7K';        // Supabase > Project Settings > API > anon public
+const SUPABASE_URL = 'https://XXXXXXXX.supabase.co';      // Supabase > Project Settings > API > Project URL
+const SUPABASE_ANON_KEY = 'BURAYA_ANON_PUBLIC_KEY';        // Supabase > Project Settings > API > anon public
 const EMAIL_DOMAIN = 'mekteb.app';                         // admin.js-dəki EMAIL_DOMAIN ilə eyni olmalıdır
 /* ================================================================ */
 
@@ -168,6 +168,23 @@ async function callAdmin(payload) {
   const j = await r.json().catch(() => ({ error: 'Serverdən yanlış cavab' }));
   if (!r.ok) throw new Error(j.error || 'Xəta');
   return j;
+}
+const pad2 = n => String(n).padStart(2, '0');
+function fmtDt(iso) { const d = new Date(iso); return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function toLocalInput(iso) { if (!iso) return ''; const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+const expired = f => !!f.deadline && new Date(f.deadline) <= new Date();
+const formOpen = f => f.is_open && !expired(f);
+function leftText(iso) {
+  let m = Math.max(0, Math.floor((new Date(iso) - new Date()) / 60000));
+  const d = Math.floor(m / 1440); m -= d * 1440; const h = Math.floor(m / 60); m -= h * 60;
+  return d ? `${d} gün ${h} saat` : h ? `${h} saat ${m} dəq` : `${m} dəqiqə`;
+}
+function deadlineBanner(f) {
+  if (!f.is_open) return '<div class="msg err">Bu cədvəlin doldurulması bağlıdır.</div>';
+  if (!f.deadline) return '';
+  if (expired(f)) return `<div class="msg err">Doldurma müddəti bitib (${fmtDt(f.deadline)}). Dəyişiklik üçün admin ilə əlaqə saxlayın.</div>`;
+  const soon = new Date(f.deadline) - new Date() < 86400000;
+  return `<div class="msg ${soon ? 'err' : ''}">Son tarix: <b>${fmtDt(f.deadline)}</b> — qalıb: <b>${leftText(f.deadline)}</b></div>`;
 }
 const cmpSchool = (a, b) => (a.school_name || '').localeCompare(b.school_name || '', 'az') ;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -260,7 +277,7 @@ async function loadSchoolForm(id) {
   S.fields = fr.data;
   S.rows = sr.data.map(s => ({ id: s.id, data: s.data || {} }));
   S.deleted = [];
-  S.ro = !S.form.is_open;
+  S.ro = !formOpen(S.form);
   if (!S.rows.length && !S.ro) S.rows.push({ id: uid(), data: {} });
   drawSchoolTable();
 }
@@ -284,7 +301,8 @@ function drawSchoolTable() {
   const F = S.form, ro = S.ro;
   const canAdd = F.multi_row && !ro;
   $('#sbody').innerHTML = `
-    <div class="bar"><h2 class="grow">${esc(F.title)}</h2>${ro ? '<span class="pill off">Doldurma bağlıdır</span>' : ''}</div>
+    <div class="bar"><h2 class="grow">${esc(F.title)}</h2></div>
+    ${deadlineBanner(F)}
     ${F.description ? `<div class="msg">${esc(F.description)}</div>` : ''}
     ${!S.fields.length ? '<div class="msg">Bu cədvəlin sütunları hələ əlavə olunmayıb.</div>' : ''}
     <div class="tw"><table id="st"><thead><tr>
@@ -445,7 +463,10 @@ async function saveRows() {
     }
     toast('Yadda saxlanıldı', 'ok');
     loadSchoolForm(S.form.id);
-  } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
+  } catch (e) {
+    toast(/row-level security/i.test(e.message) ? 'Doldurma müddəti bitib və ya cədvəl bağlanıb. Səhifəni yeniləyin.' : e.message, 'err');
+    btn.disabled = false;
+  }
 }
 
 /* =========================================================
@@ -569,8 +590,7 @@ async function deleteUser(p) {
 
 function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['Məktəb adı', 'UTİS kodu', 'Direktor', 'Login (boşdursa UTİS)', 'Parol (boşdursa avtomatik)'],
-    ['Nümunə məktəb №1', '1234567', 'Ad Soyad', '', '']
+    ['Məktəb adı', 'UTİS kodu', 'Direktor', 'Login (boşdursa UTİS)', 'Parol (boşdursa avtomatik)']
   ]);
   ws['!cols'] = [{ wch: 40 }, { wch: 14 }, { wch: 28 }, { wch: 24 }, { wch: 28 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Məktəblər');
@@ -639,9 +659,11 @@ async function adminForms() {
     <div class="cards">${data.map(f => `<div class="fc">
       <h3>${esc(f.title)}</h3>
       <div class="muted">${esc(f.description || '')}</div>
-      <div><span class="pill ${f.is_open ? '' : 'off'}">${f.is_open ? 'Açıqdır' : 'Bağlıdır'}</span>
+      <div><span class="pill ${formOpen(f) ? '' : 'off'}">${!f.is_open ? 'Bağlıdır' : expired(f) ? 'Müddət bitib' : 'Açıqdır'}</span>
+        <span class="pill ${expired(f) ? 'off' : ''}">${f.deadline ? 'Son tarix: ' + fmtDt(f.deadline) : 'Son tarix yoxdur'}</span>
         <span class="pill">${f.multi_row ? 'Çox sətirli' : 'Tək sətirli'}</span></div>
       <div><button class="btn sm" data-ed="${f.id}">Sütunlar və ayarlar</button>
+        <button class="btn ghost sm" data-ex="${f.id}">Müddəti uzat</button>
         <button class="btn ghost sm" data-tg="${f.id}">${f.is_open ? 'Bağla' : 'Aç'}</button>
         <button class="btn ghost sm" data-rm="${f.id}">Sil</button></div></div>`).join('')
       || '<div class="msg">Hələ cədvəl yoxdur. “+ Yeni cədvəl” ilə başlayın.</div>'}</div>`;
@@ -652,6 +674,7 @@ async function adminForms() {
     editForm(f.id);
   };
   $('.cards').onclick = async e => {
+    const ex = e.target.closest('[data-ex]'); if (ex) return extendModal(A.forms.find(x => x.id === ex.dataset.ex));
     const ed = e.target.closest('[data-ed]'), tg = e.target.closest('[data-tg]'), rm = e.target.closest('[data-rm]');
     if (ed) editForm(ed.dataset.ed);
     if (tg) {
@@ -665,6 +688,29 @@ async function adminForms() {
       const { error } = await sb.from('forms').delete().eq('id', f.id);
       error ? toast(error.message, 'err') : adminForms();
     }
+  };
+}
+
+function extendModal(f) {
+  const base = () => Math.max(Date.now(), f.deadline ? new Date(f.deadline).getTime() : 0);
+  const o = openModal(`<h2>Müddəti uzat</h2>
+    <p class="muted">“${esc(f.title)}” — cari son tarix: ${f.deadline ? fmtDt(f.deadline) : 'təyin edilməyib'}</p>
+    <div class="bar"><span>Cari tarixdən:</span>
+      <button class="btn ghost sm" data-add="1">+1 gün</button><button class="btn ghost sm" data-add="3">+3 gün</button><button class="btn ghost sm" data-add="7">+7 gün</button></div>
+    <label class="f">Yeni son tarix<input type="datetime-local" id="x_dl" value="${toLocalInput(f.deadline || new Date(Date.now() + 86400000).toISOString())}"></label>
+    <p class="muted">Yadda saxlayanda cədvəl yenidən açıq olacaq və məktəblər dəyişiklik edə biləcək.</p>
+    <div class="foot"><button class="btn ghost" id="c">Ləğv et</button><button class="btn" id="s">Yadda saxla</button></div>`);
+  o.addEventListener('click', e => {
+    const b = e.target.closest('[data-add]'); if (!b) return;
+    $('#x_dl', o).value = toLocalInput(new Date(base() + (+b.dataset.add) * 86400000).toISOString());
+  });
+  $('#c', o).onclick = () => o.remove();
+  $('#s', o).onclick = async () => {
+    const v = $('#x_dl', o).value;
+    if (!v) return toast('Tarix seçin', 'err');
+    const { error } = await sb.from('forms').update({ deadline: new Date(v).toISOString(), is_open: true }).eq('id', f.id);
+    if (error) return toast(error.message, 'err');
+    o.remove(); toast('Müddət uzadıldı', 'ok'); adminForms();
   };
 }
 
@@ -690,6 +736,8 @@ function drawEditor() {
         <label><input type="checkbox" id="e_m" style="width:auto" ${f.multi_row ? 'checked' : ''}> Məktəb bir neçə sətir doldura bilsin</label>
         <label><input type="checkbox" id="e_o" style="width:auto" ${f.is_open ? 'checked' : ''}> Doldurma açıqdır</label>
       </div>
+      <label class="f">Doldurmanın son tarixi (boş buraxsanız limitsizdir; məktəblər bunu görür)
+        <input type="datetime-local" id="e_dl" value="${toLocalInput(f.deadline)}"></label>
     </div>
     <div class="msg">Hər cədvəldə <b>Məktəb adı</b> və <b>UTİS kodu</b> sütunları avtomatik, ilk iki sütun kimi əlavə olunur. Aşağıda yalnız qalan sütunları təyin edin.</div>
     <div class="tw"><table><thead><tr><th>№</th><th>Sütun adı</th><th>Növ</th><th>Seçimlər (vergüllə)</th><th>Məcburi</th><th>Qaydalar</th><th></th></tr></thead><tbody id="eb">
@@ -748,6 +796,7 @@ function syncEditor() {
   if ($('#e_t')) {
     E.form.title = $('#e_t').value; E.form.description = $('#e_d').value;
     E.form.multi_row = $('#e_m').checked; E.form.is_open = $('#e_o').checked;
+    E.form.deadline = $('#e_dl').value ? new Date($('#e_dl').value).toISOString() : null;
   }
 }
 async function saveForm() {
@@ -757,7 +806,7 @@ async function saveForm() {
   if (E.fields.some(x => x.field_type === 'select' && !x.options.length)) return toast('Seçim sütunları üçün variantları yazın', 'err');
   if (E.fields.some(x => x.min_limit != null && x.max_limit != null && x.min_limit > x.max_limit)) return toast('Min limit max-dan böyük ola bilməz', 'err');
   try {
-    let r = await sb.from('forms').update({ title: E.form.title.trim(), description: E.form.description || null, multi_row: E.form.multi_row, is_open: E.form.is_open }).eq('id', E.form.id);
+    let r = await sb.from('forms').update({ title: E.form.title.trim(), description: E.form.description || null, multi_row: E.form.multi_row, is_open: E.form.is_open, deadline: E.form.deadline ?? null }).eq('id', E.form.id);
     if (r.error) throw r.error;
     if (E.deleted.length) { r = await sb.from('form_fields').delete().in('id', E.deleted); if (r.error) throw r.error; }
     if (E.fields.length) {
