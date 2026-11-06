@@ -480,6 +480,7 @@ function renderAdmin() {
       <button class="tab" data-t="users">İstifadəçilər</button>
       <button class="tab" data-t="forms">Cədvəl formaları</button>
       <button class="tab" data-t="data">Daxil olan məlumatlar</button>
+      <button class="tab" data-t="status">Təqdimetmə statusu</button>
     </div>
     <div id="tab"></div>`,
     `<button class="btn light" id="expall">⬇ Hamısını Excel-ə export et</button>`);
@@ -490,7 +491,7 @@ function renderAdmin() {
 function adminTab(t) {
   A.tab = t;
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t));
-  ({ users: adminUsers, forms: adminForms, data: adminData })[t]();
+  ({ users: adminUsers, forms: adminForms, data: adminData, status: adminStatus })[t]();
 }
 
 /* ---------- İstifadəçilər ---------- */
@@ -508,6 +509,7 @@ async function adminUsers() {
       <button class="btn" id="addu">+ İstifadəçi əlavə et</button>
       <button class="btn ghost" id="bulk">Excel-dən toplu yüklə</button>
       <button class="btn ghost" id="tpl">Şablonu yüklə</button>
+      <button class="btn ghost" id="exportSchools">Məktəblər siyahısını export et</button>
       <input type="file" id="bf" accept=".xlsx,.xls,.csv" class="hidden">
     </div>
     <p class="muted" id="ucount"></p>
@@ -535,6 +537,7 @@ async function adminUsers() {
   $('#addu').onclick = () => userModal(null);
   $('#tpl').onclick = downloadTemplate;
   $('#bulk').onclick = () => $('#bf').click();
+  $('#exportSchools').onclick = exportSchools;
   $('#bf').onchange = e => { if (e.target.files[0]) bulkImport(e.target.files[0]); e.target.value = ''; };
 }
 
@@ -655,7 +658,10 @@ async function adminForms() {
   if (error) return toast(error.message, 'err');
   A.forms = data;
   $('#tab').innerHTML = `
-    <div class="bar"><button class="btn" id="nf">+ Yeni cədvəl</button></div>
+    <div class="bar"><button class="btn" id="nf">+ Yeni cədvəl</button>
+      <button class="btn ghost" id="importWorkbookBtn">Excel-dən çoxsəhifəli şablon yarat</button>
+      <input type="file" id="importWorkbookFile" accept=".xlsx,.xls" class="hidden">
+      <span class="muted">Hər Excel Sheet-i ayrıca cədvəl formasına çevriləcək.</span></div>
     <div class="cards">${data.map(f => `<div class="fc">
       <h3>${esc(f.title)}</h3>
       <div class="muted">${esc(f.description || '')}</div>
@@ -667,6 +673,8 @@ async function adminForms() {
         <button class="btn ghost sm" data-tg="${f.id}">${f.is_open ? 'Bağla' : 'Aç'}</button>
         <button class="btn ghost sm" data-rm="${f.id}">Sil</button></div></div>`).join('')
       || '<div class="msg">Hələ cədvəl yoxdur. “+ Yeni cədvəl” ilə başlayın.</div>'}</div>`;
+  $('#importWorkbookBtn').onclick = () => $('#importWorkbookFile').click();
+  $('#importWorkbookFile').onchange = async e => { const file=e.target.files[0]; e.target.value=''; if(file) await importWorkbookTemplate(file); };
   $('#nf').onclick = async () => {
     const title = prompt('Cədvəlin adı:'); if (!title) return;
     const { data: f, error } = await sb.from('forms').insert({ title, position: A.forms.length }).select().single();
@@ -689,6 +697,59 @@ async function adminForms() {
       error ? toast(error.message, 'err') : adminForms();
     }
   };
+}
+
+async function importWorkbookTemplate(file) {
+  let wb;
+  try { wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true }); }
+  catch (e) { return toast('Excel faylı oxunmadı', 'err'); }
+  const plans = [];
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
+    const headers = (rows[0] || []).map(v => String(v ?? '').trim());
+    const labels = headers.filter(Boolean).filter(h => !['məktəb adı','mekteb adi','utis','utis kodu','utis kod'].includes(norm(h))); 
+    if (!labels.length) continue;
+    const unique = new Set();
+    for (const label of labels) {
+      const k = norm(label);
+      if (unique.has(k)) return toast(`“${name}” səhifəsində təkrarlanan sütun adı var: ${label}`, 'err');
+      unique.add(k);
+    }
+    plans.push({ title: name.trim().slice(0, 120) || 'Cədvəl', labels });
+  }
+  if (!plans.length) return toast('Excel faylında başlıq sətri olan Sheet tapılmadı', 'err');
+  const summary = plans.map(x => `${x.title}: ${x.labels.length} sütun`).join('\n');
+  if (!confirm(`${plans.length} cədvəl forması yaradılacaq:\n\n${summary}\n\nDavam edilsin? Mövcud formalar silinməyəcək.`)) return;
+  try {
+    const { data: oldForms, error: oldErr } = await sb.from('forms').select('id').order('position');
+    if (oldErr) throw oldErr;
+    let position = (oldForms || []).length;
+    for (const plan of plans) {
+      const { data: form, error: fe } = await sb.from('forms').insert({ title: plan.title, description: `Excel şablonundan yaradılıb: ${file.name}`, multi_row: true, is_open: true, position: position++ }).select().single();
+      if (fe) throw fe;
+      const fields = plan.labels.map((label, i) => ({ form_id: form.id, label, field_type: 'text', options: [], required: false, position: i }));
+      const { error: fie } = await sb.from('form_fields').insert(fields);
+      if (fie) throw fie;
+    }
+    toast(`${plans.length} cədvəl forması yaradıldı`, 'ok');
+    await adminForms();
+  } catch (e) {
+    toast(`Yaratma zamanı xəta: ${e.message}. Əvvəl yaradılmış formalar saxlanılıb.`, 'err');
+    await adminForms();
+  }
+}
+
+function exportSchools() {
+  const schools = A.profiles.filter(p => p.role === 'school').sort(cmpSchool);
+  const aoa = [['Məktəb adı', 'UTİS kodu', 'Direktorun adı', 'Rayon', 'Login', 'Status'],
+    ...schools.map(p => [p.school_name || '', p.utis_code || '', p.director_name || '', p.username || '', p.active ? 'Aktiv' : 'Deaktiv'])];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:42},{wch:16},{wch:30},{wch:22},{wch:14}];
+  ws['!freeze'] = { xSplit: 2, ySplit: 1 };
+  XLSX.utils.book_append_sheet(wb, ws, 'Məktəblər');
+  XLSX.writeFile(wb, `mekteblerin_siyahisi_${today()}.xlsx`);
 }
 
 function extendModal(f) {
@@ -865,6 +926,56 @@ async function adminData() {
   load();
 }
 
+/* ---------- Məktəblərin təqdimetmə statusu ---------- */
+async function adminStatus() {
+  $('#tab').innerHTML = '<p class="muted">Statuslar yüklənir…</p>';
+  try {
+    await loadProfiles();
+    const schools = A.profiles.filter(p => p.role === 'school').sort(cmpSchool);
+    const forms = await fetchAll(() => sb.from('forms').select('*').order('position').order('created_at'));
+    const parts = [];
+    for (const f of forms) {
+      const subs = await fetchAll(() => sb.from('submissions').select('school_id,data').eq('form_id', f.id));
+      const done = new Set(subs.filter(x => x.data && Object.values(x.data).some(v => String(v ?? '').trim() !== '')).map(x => x.school_id));
+      parts.push({ form: f, done });
+    }
+    const statusRows = schools.map(p => ({ profile:p, flags:parts.map(x => x.done.has(p.id)) }));
+    const complete = statusRows.filter(x => parts.length && x.flags.every(Boolean)).length;
+    const none = statusRows.filter(x => !x.flags.some(Boolean)).length;
+    $('#tab').innerHTML = `<div class="bar">
+      <input class="grow" id="statusQ" placeholder="Məktəb adı, UTİS və ya rayon üzrə axtar…">
+      <button class="btn" id="statusExport">Bütün statusları export et</button>
+      <button class="btn ghost" id="statusMissingExport">Bütün cədvəlləri tamamlamayanları export et</button>
+    </div>
+    <p class="muted" id="statusInfo">Cəmi ${schools.length} məktəb · Bütün cədvəlləri tamamlayan: ${complete} · Heç bir məlumat təqdim etməyən: ${none}</p>
+    <div class="tw"><table id="statusTable"></table></div>`;
+    const draw = () => {
+      const q = norm($('#statusQ').value);
+      const list = statusRows.filter(x => !q || norm([x.profile.school_name,x.profile.utis_code,x.profile.district,x.profile.rayon].join(' ')).includes(q));
+      $('#statusTable').innerHTML = `<thead><tr><th>№</th><th>Məktəb adı</th><th>UTİS</th>${parts.map(x=>`<th>${esc(x.form.title)}</th>`).join('')}<th>Ümumi status</th></tr></thead><tbody>${list.map((x,i)=>{
+        const count=x.flags.filter(Boolean).length;
+        const overall=parts.length && count===parts.length ? '<span class="pill">Tam təqdim edib</span>' : count ? '<span class="pill adm">Qismən təqdim edib</span>' : '<span class="pill off">Təqdim etməyib</span>';
+        return `<tr><td>${i+1}</td><td>${esc(x.profile.school_name)}</td><td>${esc(x.profile.utis_code)}</td>${x.flags.map(v=>`<td>${v?'<span class="pill">Təqdim edib</span>':'<span class="pill off">Təqdim etməyib</span>'}</td>`).join('')}<td>${overall}</td></tr>`;
+      }).join('') || `<tr><td colspan="${parts.length+4}">Məktəb tapılmadı.</td></tr>`}</tbody>`;
+      $('#statusInfo').textContent = `Göstərilir: ${list.length} / ${schools.length} məktəb · Bütün cədvəlləri tamamlayan: ${complete} · Heç bir məlumat təqdim etməyən: ${none}`;
+    };
+    $('#statusQ').oninput = draw; draw();
+    const makeStatusBook = onlyMissing => {
+      const rows = onlyMissing ? statusRows.filter(x => parts.length && !x.flags.every(Boolean)) : statusRows;
+      const aoa = [['Məktəb adı','UTİS kodu','Direktorun adı',...parts.map(x=>x.form.title),'Ümumi status'], ...rows.map(x=>{
+        const n=x.flags.filter(Boolean).length;
+        return [x.profile.school_name||'',x.profile.utis_code||'',x.profile.director_name||'',...x.flags.map(v=>v?'Təqdim edib':'Təqdim etməyib'),parts.length&&n===parts.length?'Tam təqdim edib':n?'Qismən təqdim edib':'Təqdim etməyib'];
+      })];
+      const wb=XLSX.utils.book_new(), ws=XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols']=[{wch:42},{wch:16},{wch:28},...parts.map(()=>({wch:24})),{wch:22}];
+      XLSX.utils.book_append_sheet(wb,ws,'Status');
+      XLSX.writeFile(wb, onlyMissing?`butun_cedvelleri_tamamlamayanlar_${today()}.xlsx`:`teqdimetme_statuslari_${today()}.xlsx`);
+    };
+    $('#statusExport').onclick=()=>makeStatusBook(false);
+    $('#statusMissingExport').onclick=()=>makeStatusBook(true);
+  } catch(e) { toast(e.message,'err'); }
+}
+
 /* ---------- Excel export ---------- */
 function sheetName(wb, title) {
   let base = title.replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || 'Cədvəl', n = base, i = 2;
@@ -894,43 +1005,22 @@ async function exportAll() {
     const { data: forms, error } = await sb.from('forms').select('*').order('position').order('created_at');
     if (error) throw error;
     if (!forms.length) throw new Error('Hələ cədvəl yoxdur');
-    const multi = forms.length > 1;
-    // hər cədvəl üçün: sütunlar və məktəb üzrə sətirlər
-    const parts = [];
-    for (const f of forms) {
-      const { data: fields } = await sb.from('form_fields').select('*').eq('form_id', f.id).order('position');
-      const subs = await fetchAll(() => sb.from('submissions').select('*').eq('form_id', f.id).order('id'));
-      const bySchool = {};
-      subs.forEach(s => (bySchool[s.school_id] = bySchool[s.school_id] || []).push(s));
-      Object.values(bySchool).forEach(l => l.sort((a, b) => a.row_no - b.row_no));
-      parts.push({ f, fields: fields || [], bySchool });
-    }
-    // başlıq: Məktəb adı | UTİS | (Cədvəl adı: sütun) ...
-    const head = ['Məktəb adı', 'UTİS kodu'];
-    parts.forEach(pt => pt.fields.forEach(fl => head.push(multi ? `${pt.f.title}: ${fl.label}` : fl.label)));
-    const aoa = [head];
-    const sorted = [...schools].sort(cmpSchool);
-    sorted.forEach(p => {
-      const n = Math.max(1, ...parts.map(pt => (pt.bySchool[p.id] || []).length));
-      for (let i = 0; i < n; i++) {
-        const row = [p.school_name || '', p.utis_code || ''];
-        parts.forEach(pt => {
-          const s = (pt.bySchool[p.id] || [])[i];
-          pt.fields.forEach(fl => {
-            const v = s ? (s.data[fl.id] ?? '') : '';
-            row.push(fl.field_type === 'number' && v !== '' && !isNaN(Number(v)) ? Number(v) : v);
-          });
-        });
-        aoa.push(row);
-      }
-    });
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 42 }, { wch: 14 }, ...head.slice(2).map(() => ({ wch: 24 }))];
-    ws['!freeze'] = { xSplit: 2, ySplit: 1 };
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Məlumatlar');
+    for (const f of forms) {
+      const { data: fields, error: fieldErr } = await sb.from('form_fields').select('*').eq('form_id', f.id).order('position');
+      if (fieldErr) throw fieldErr;
+      const subs = await fetchAll(() => sb.from('submissions').select('*').eq('form_id', f.id).order('id'));
+      const submitted = new Set(subs.filter(s => s.data && Object.values(s.data).some(v => String(v ?? '').trim() !== '')).map(s => s.school_id));
+      const validSubs = subs.filter(s => s.data && Object.values(s.data).some(v => String(v ?? '').trim() !== ''));
+      addFormSheet(wb, f, fields || [], validSubs, Object.fromEntries(A.profiles.map(p => [p.id,p])));
+    }
+    // Ayrıca məktəb siyahısı da eyni Excel faylında ayrıca Sheet kimi olsun.
+    const schoolRows = [['Məktəb adı','UTİS kodu','Direktorun adı','Login','Status'], ...schools.sort(cmpSchool).map(p=>[p.school_name||'',p.utis_code||'',p.director_name||'',p.username||'',p.active?'Aktiv':'Deaktiv'])];
+    const sws = XLSX.utils.aoa_to_sheet(schoolRows);
+    sws['!cols']=[{wch:42},{wch:16},{wch:28},{wch:22},{wch:14}];
+    XLSX.utils.book_append_sheet(wb,sws,sheetName(wb,'Məktəblər'));
     XLSX.writeFile(wb, `butun_melumatlar_${today()}.xlsx`);
-    toast('Excel faylı hazırdır', 'ok');
+    toast('Bir Excel faylı yaradıldı: hər cədvəl ayrıca Sheet-dədir', 'ok');
   } catch (e) { toast(e.message, 'err'); }
   btn.disabled = false; btn.textContent = old;
 }
