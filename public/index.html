@@ -266,7 +266,8 @@ async function renderSchool() {
 
 async function loadSchoolForm(id) {
   S.form = S.forms.find(f => f.id === id);
-  $('#ftabs').innerHTML = S.forms.map(f => `<button data-id="${f.id}" class="${f.id === id ? 'on' : ''}">${esc(f.title)}</button>`).join('');
+  const grouped = S.forms.reduce((acc, f) => { const g = (f.group_name || 'Digər cədvəllər').trim() || 'Digər cədvəllər'; (acc[g] ||= []).push(f); return acc; }, {});
+  $('#ftabs').innerHTML = Object.entries(grouped).map(([g, forms]) => `<div style="width:100%;font-weight:700;color:var(--brand);margin:8px 0 2px">${esc(g)}</div><div class="ftabs" style="margin-bottom:8px">${forms.map(f => `<button data-id="${f.id}" class="${f.id === id ? 'on' : ''}">${esc(f.title)}</button>`).join('')}</div>`).join('');
   $('#ftabs').onclick = e => { const b = e.target.closest('button'); if (b) loadSchoolForm(b.dataset.id); };
   $('#sbody').innerHTML = '<p class="muted">Yüklənir…</p>';
   const [fr, sr] = await Promise.all([
@@ -668,7 +669,9 @@ async function adminForms() {
       <div><span class="pill ${formOpen(f) ? '' : 'off'}">${!f.is_open ? 'Bağlıdır' : expired(f) ? 'Müddət bitib' : 'Açıqdır'}</span>
         <span class="pill ${expired(f) ? 'off' : ''}">${f.deadline ? 'Son tarix: ' + fmtDt(f.deadline) : 'Son tarix yoxdur'}</span>
         <span class="pill">${f.multi_row ? 'Çox sətirli' : 'Tək sətirli'}</span></div>
-      <div><button class="btn sm" data-ed="${f.id}">Sütunlar və ayarlar</button>
+      <div class="muted">Qrup: <b>${esc(f.group_name || 'Digər cədvəllər')}</b></div>
+      <div><button class="btn ghost sm" data-gr="${f.id}">Qrup təyin et</button>
+        <button class="btn sm" data-ed="${f.id}">Sütunlar və ayarlar</button>
         <button class="btn ghost sm" data-ex="${f.id}">Müddəti uzat</button>
         <button class="btn ghost sm" data-tg="${f.id}">${f.is_open ? 'Bağla' : 'Aç'}</button>
         <button class="btn ghost sm" data-rm="${f.id}">Sil</button></div></div>`).join('')
@@ -683,6 +686,15 @@ async function adminForms() {
   };
   $('.cards').onclick = async e => {
     const ex = e.target.closest('[data-ex]'); if (ex) return extendModal(A.forms.find(x => x.id === ex.dataset.ex));
+    const gr = e.target.closest('[data-gr]');
+    if (gr) {
+      const f = A.forms.find(x => x.id === gr.dataset.gr);
+      const value = prompt('Qrupun adı (məsələn: Davamiyyət monitorinqi). Boş saxlasanız “Digər cədvəllər” qrupuna düşəcək:', f.group_name || '');
+      if (value === null) return;
+      const { error } = await sb.from('forms').update({ group_name: value.trim() || null }).eq('id', f.id);
+      if (error) return toast(error.message, 'err');
+      return adminForms();
+    }
     const ed = e.target.closest('[data-ed]'), tg = e.target.closest('[data-tg]'), rm = e.target.closest('[data-rm]');
     if (ed) editForm(ed.dataset.ed);
     if (tg) {
@@ -998,31 +1010,46 @@ function addFormSheet(wb, form, fields, subs, profMap) {
   XLSX.utils.book_append_sheet(wb, ws, sheetName(wb, form.title));
 }
 async function exportAll() {
-  const btn = $('#expall'); btn.disabled = true; const old = btn.textContent; btn.textContent = 'Hazırlanır…';
   try {
-    await loadProfiles();
-    const schools = A.profiles.filter(p => p.role === 'school');
     const { data: forms, error } = await sb.from('forms').select('*').order('position').order('created_at');
     if (error) throw error;
     if (!forms.length) throw new Error('Hələ cədvəl yoxdur');
-    const wb = XLSX.utils.book_new();
-    for (const f of forms) {
-      const { data: fields, error: fieldErr } = await sb.from('form_fields').select('*').eq('form_id', f.id).order('position');
-      if (fieldErr) throw fieldErr;
-      const subs = await fetchAll(() => sb.from('submissions').select('*').eq('form_id', f.id).order('id'));
-      const submitted = new Set(subs.filter(s => s.data && Object.values(s.data).some(v => String(v ?? '').trim() !== '')).map(s => s.school_id));
-      const validSubs = subs.filter(s => s.data && Object.values(s.data).some(v => String(v ?? '').trim() !== ''));
-      addFormSheet(wb, f, fields || [], validSubs, Object.fromEntries(A.profiles.map(p => [p.id,p])));
-    }
-    // Ayrıca məktəb siyahısı da eyni Excel faylında ayrıca Sheet kimi olsun.
-    const schoolRows = [['Məktəb adı','UTİS kodu','Direktorun adı','Login','Status'], ...schools.sort(cmpSchool).map(p=>[p.school_name||'',p.utis_code||'',p.director_name||'',p.username||'',p.active?'Aktiv':'Deaktiv'])];
-    const sws = XLSX.utils.aoa_to_sheet(schoolRows);
-    sws['!cols']=[{wch:42},{wch:16},{wch:28},{wch:22},{wch:14}];
-    XLSX.utils.book_append_sheet(wb,sws,sheetName(wb,'Məktəblər'));
-    XLSX.writeFile(wb, `butun_melumatlar_${today()}.xlsx`);
-    toast('Bir Excel faylı yaradıldı: hər cədvəl ayrıca Sheet-dədir', 'ok');
-  } catch (e) { toast(e.message, 'err'); }
-  btn.disabled = false; btn.textContent = old;
+    const groups = forms.reduce((a,f)=>{ const g=(f.group_name||'Digər cədvəllər').trim()||'Digər cədvəllər'; (a[g] ||= []).push(f); return a; },{});
+    const o = openModal(`<h2>Excel-ə export ediləcək cədvəlləri seç</h2>
+      <p class="muted">Seçdiyiniz hər cədvəl eyni Excel faylında ayrıca Sheet olacaq.</p>
+      <div class="bar"><button class="btn ghost sm" id="selAll">Hamısını seç</button><button class="btn ghost sm" id="selNone">Seçimi sil</button></div>
+      <div id="exportChecks">${Object.entries(groups).map(([g,fs])=>`<section style="margin:12px 0"><b>${esc(g)}</b>${fs.map(f=>`<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" data-export-form="${f.id}" checked style="width:auto">${esc(f.title)}</label>`).join('')}</section>`).join('')}</div>
+      <label style="display:flex;gap:8px;align-items:center;margin:14px 0"><input type="checkbox" id="includeSchools" style="width:auto"> Məktəblər siyahısını da əlavə et</label>
+      <div class="foot"><button class="btn ghost" id="cancelExport">Ləğv et</button><button class="btn" id="doExport">Seçilənləri Excel-ə yığ</button></div>`);
+    $('#cancelExport',o).onclick=()=>o.remove();
+    $('#selAll',o).onclick=()=>o.querySelectorAll('[data-export-form]').forEach(x=>x.checked=true);
+    $('#selNone',o).onclick=()=>o.querySelectorAll('[data-export-form]').forEach(x=>x.checked=false);
+    $('#doExport',o).onclick=async()=>{
+      const selected=forms.filter(f=>o.querySelector(`[data-export-form="${f.id}"]`)?.checked);
+      const includeSchools=$('#includeSchools',o).checked;
+      if(!selected.length&&!includeSchools) return toast('Ən azı bir cədvəl və ya məktəblər siyahısını seçin','err');
+      const btn=$('#doExport',o); btn.disabled=true; btn.textContent='Hazırlanır…';
+      try {
+        await loadProfiles();
+        const wb=XLSX.utils.book_new();
+        for(const f of selected){
+          const {data:fields,error:fieldErr}=await sb.from('form_fields').select('*').eq('form_id',f.id).order('position');
+          if(fieldErr) throw fieldErr;
+          const subs=await fetchAll(()=>sb.from('submissions').select('*').eq('form_id',f.id).order('id'));
+          const valid=subs.filter(s=>s.data&&Object.values(s.data).some(v=>String(v??'').trim()!==''));
+          addFormSheet(wb,f,fields||[],valid,Object.fromEntries(A.profiles.map(p=>[p.id,p])));
+        }
+        if(includeSchools){
+          const schools=A.profiles.filter(p=>p.role==='school').sort(cmpSchool);
+          const rows=[['Məktəb adı','UTİS kodu','Direktorun adı','Login','Status'],...schools.map(p=>[p.school_name||'',p.utis_code||'',p.director_name||'',p.username||'',p.active?'Aktiv':'Deaktiv'])];
+          const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:42},{wch:16},{wch:28},{wch:22},{wch:14}];
+          XLSX.utils.book_append_sheet(wb,ws,sheetName(wb,'Məktəblər'));
+        }
+        XLSX.writeFile(wb,`sec илmis_cedveller_${today()}.xlsx`.replace('sec илmis','secilmis'));
+        o.remove(); toast(`Excel hazırdır: ${selected.length} cədvəl${includeSchools?' və məktəblər siyahısı':''}. Hər biri ayrıca Sheet-dədir.`,'ok');
+      }catch(e){toast(e.message,'err');btn.disabled=false;btn.textContent='Seçilənləri Excel-ə yığ';}
+    };
+  } catch(e){toast(e.message,'err');}
 }
 
 init();
